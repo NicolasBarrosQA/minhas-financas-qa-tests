@@ -1,0 +1,32 @@
+{
+  "name": "minhas-financas-frontend-tests",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "test:unit": "vitest run",
+    "test:unit:stable": "vitest run --exclude \"unit/**/*.known-bug.spec.ts*\"",
+    "test:unit:known-bug": "vitest run unit/schemas.known-bug.spec.ts unit/transacoes.known-bug.spec.tsx",
+    "test:e2e": "playwright test",
+    "test:e2e:stable": "playwright test --grep-invert \"@known-bug\"",
+    "test:e2e:known-bug": "playwright test --grep \"@known-bug\"",
+    "test:all": "npm run test:unit && npm run test:e2e",
+    "test:all:stable": "npm run test:unit:stable && npm run test:e2e:stable"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.55.0",
+    "@tanstack/react-query": "^5.90.5",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.0",
+    "@types/node": "^24.5.2",
+    "@types/react": "^19.1.16",
+    "@types/react-dom": "^19.1.9",
+    "jsdom": "^26.1.0",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "axios": "^1.12.2",
+    "typescript": "^5.9.2",
+    "vitest": "^2.1.8",
+    "zod": "^4.1.5"
+  }
+}
