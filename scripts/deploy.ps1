@@ -9,12 +9,38 @@ function Write-Step([string]$Message) {
   Write-Host "[deploy] $Message" -ForegroundColor Cyan
 }
 
+function Load-DotEnvFile([string]$FilePath) {
+  if (-not (Test-Path $FilePath)) {
+    return
+  }
+
+  Get-Content -Path $FilePath | ForEach-Object {
+    $line = $_.Trim()
+    if (-not $line -or $line.StartsWith("#")) {
+      return
+    }
+
+    $parts = $line -split "=", 2
+    if ($parts.Count -ne 2) {
+      return
+    }
+
+    $key = $parts[0].Trim()
+    $value = $parts[1].Trim().Trim('"').Trim("'")
+
+    if ($key) {
+      [System.Environment]::SetEnvironmentVariable($key, $value, "Process")
+    }
+  }
+}
+
 $repoRoot = Split-Path -Parent $PSScriptRoot
 if (-not (Test-Path (Join-Path $repoRoot ".git"))) {
   throw "Git repository not found at $repoRoot"
 }
 
 Set-Location $repoRoot
+Load-DotEnvFile (Join-Path $repoRoot ".env.deploy.local")
 
 $appDir = Join-Path $repoRoot "azainterface-main"
 if (-not (Test-Path $appDir)) {

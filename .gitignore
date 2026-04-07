@@ -26,6 +26,7 @@
 **/.env
 **/.env.local
 **/.env.*.local
+.env.deploy.local
 
 # App-specific local files
 azainterface-main/dev-once.log
