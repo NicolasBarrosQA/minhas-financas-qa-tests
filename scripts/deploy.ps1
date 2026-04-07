@@ -32,7 +32,7 @@ $supabaseDbPassword = $env:SUPABASE_DB_PASSWORD
 if ($supabaseToken -and $supabaseDbPassword) {
   Write-Step "Deploying Supabase migrations"
   Push-Location $appDir
-  npx supabase db push --project-ref $projectRef
+  npx supabase db push -p $supabaseDbPassword --yes --include-all
 
   Write-Step "Deploying Supabase functions"
   npx supabase functions deploy parse-transaction --project-ref $projectRef
