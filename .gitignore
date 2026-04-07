@@ -1,7 +1,33 @@
+# Root-level ignores for mono-workspace
 **/bin/
 **/obj/
 **/node_modules/
-**/playwright-report/
+**/dist/
+**/dist-ssr/
+**/coverage/
 **/test-results/
+**/playwright-report/
+**/artifacts/
+
 .idea/
 .vscode/
+
+# Logs and temp
+**/*.log
+**/npm-debug.log*
+**/yarn-debug.log*
+**/yarn-error.log*
+**/.DS_Store
+**/*.tmp
+**/*.temp
+**/*.tsbuildinfo
+
+# Local envs
+**/.env
+**/.env.local
+**/.env.*.local
+
+# App-specific local files
+azainterface-main/dev-once.log
+azainterface-main/dev-run.log
+azainterface-main/tmp_client_dump.txt
