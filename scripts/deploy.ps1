@@ -1,5 +1,6 @@
-﻿param(
-  [string]$CommitMessage = "chore: deploy"
+param(
+  [string]$CommitMessage = "chore: deploy",
+  [string]$TargetBranch = "main"
 )
 
 $ErrorActionPreference = "Stop"
@@ -56,8 +57,13 @@ $branch = git branch --show-current
 $hasOrigin = git remote | Where-Object { $_ -eq "origin" }
 
 if ($hasOrigin) {
-  Write-Step "Pushing branch '$branch' to origin"
-  git push -u origin $branch
+  if ($branch -eq $TargetBranch) {
+    Write-Step "Pushing branch '$branch' to origin"
+    git push -u origin $branch
+  } else {
+    Write-Step "Pushing current branch '$branch' to origin/$TargetBranch"
+    git push origin "$branch`:$TargetBranch"
+  }
 } else {
   Write-Step "Skipping git push (no remote 'origin' configured)"
 }
