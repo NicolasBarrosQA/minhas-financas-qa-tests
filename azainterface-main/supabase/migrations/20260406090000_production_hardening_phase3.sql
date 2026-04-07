@@ -1,4 +1,4 @@
-﻿begin;
+begin;
 
 -- 1) Harden derived fields: block manual writes on INSERT and UPDATE.
 create or replace function public.is_internal_derived_update()
