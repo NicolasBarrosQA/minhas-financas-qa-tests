@@ -15,6 +15,8 @@ const TRANSACTION_HINT_RE =
 const GREETING_RE = /\b(oi|ola|opa|e ai|eae|beleza|bom dia|boa tarde|boa noite)\b/i;
 const THANKS_RE = /\b(obrigad[oa]?|valeu|tmj|tamo junto)\b/i;
 const HELP_RE = /\b(ajuda|como funciona|o que voce faz|oque voce faz)\b/i;
+const DATE_CONTEXT_RE =
+  /\b(janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro|hoje|ontem|amanha|anteontem|ano|mes|m[eê]s|semana)\b/i;
 
 const TRANSFER_KEYWORDS = [
   "transfer",
@@ -94,23 +96,46 @@ function parsePtBrNumber(raw: string): number | null {
   const normalized = raw.replace(/[^\d,.-]/g, "");
   if (!normalized) return null;
 
-  if (normalized.includes(",") && normalized.includes(".")) {
-    const value = Number(normalized.replace(/\./g, "").replace(",", "."));
-    return Number.isFinite(value) ? value : null;
+  const sign = normalized.startsWith("-") ? -1 : 1;
+  const unsigned = normalized.replace(/^[+-]/, "");
+  const hasComma = unsigned.includes(",");
+  const hasDot = unsigned.includes(".");
+
+  if (hasComma && hasDot) {
+    const value = Number(unsigned.replace(/\./g, "").replace(",", "."));
+    return Number.isFinite(value) ? sign * value : null;
   }
 
-  if (normalized.includes(",")) {
-    const value = Number(normalized.replace(",", "."));
-    return Number.isFinite(value) ? value : null;
+  if (hasComma) {
+    const value = Number(unsigned.replace(/\./g, "").replace(",", "."));
+    return Number.isFinite(value) ? sign * value : null;
   }
 
-  const value = Number(normalized);
-  return Number.isFinite(value) ? value : null;
+  if (hasDot) {
+    const looksLikeThousandSeparator = /^\d{1,3}(?:\.\d{3})+$/.test(unsigned);
+    const value = Number(looksLikeThousandSeparator ? unsigned.replace(/\./g, "") : unsigned);
+    return Number.isFinite(value) ? sign * value : null;
+  }
+
+  const value = Number(unsigned);
+  return Number.isFinite(value) ? sign * value : null;
+}
+
+function isLikelyYearToken(token: string, fullText: string): boolean {
+  const digits = token.replace(/[^\d]/g, "");
+  if (!/^\d{4}$/.test(digits)) return false;
+
+  const year = Number(digits);
+  if (!Number.isFinite(year) || year < 1900 || year > 2100) return false;
+
+  return DATE_CONTEXT_RE.test(normalize(fullText));
 }
 
 function parseScaledAmount(raw: string): number | null {
   const normalized = stripDiacritics(raw).toLowerCase();
-  const match = normalized.match(/(\d{1,3}(?:\.\d{3})*(?:,\d+)?|\d+(?:[.,]\d+)?)\s*(bilh(?:ao|oes)|bi|milh(?:ao|oes)|mi|mil|k)\b/);
+  const match = normalized.match(
+    /(\d{1,3}(?:\.\d{3})*(?:,\d+)?|\d+(?:[.,]\d+)?)\s*(bilh(?:ao|oes)|bi|milh(?:ao|oes)|mi|mil|k)\b/,
+  );
   if (!match?.[1] || !match?.[2]) return null;
 
   const base = parsePtBrNumber(match[1]);
@@ -144,7 +169,9 @@ function parseAmount(text: string): number | null {
     .replace(/\b\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?\b/g, " ")
     .replace(/\bdia\s+\d{1,2}\s+de\s+[a-z]+\b/gi, " ");
 
-  const matches = [...scrubbedText.matchAll(/(\d{1,3}(?:\.\d{3})*(?:,\d{1,2})|\d+(?:[.,]\d{1,2})?)/g)];
+  const matches = [
+    ...scrubbedText.matchAll(/(\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?|\d+[.,]\d{1,2}|\d+)/g),
+  ];
   for (let index = matches.length - 1; index >= 0; index -= 1) {
     const match = matches[index];
     const token = match[1];
@@ -156,7 +183,8 @@ function parseAmount(text: string): number | null {
       before === "/" ||
       after === "/" ||
       /^\s*x\b/i.test(tail) ||
-      /^\s*parcelas?\b/i.test(tail)
+      /^\s*parcelas?\b/i.test(tail) ||
+      isLikelyYearToken(token, text)
     ) {
       continue;
     }
@@ -262,7 +290,16 @@ function detectType(text: string, hasAmount: boolean, installments: number | nul
   const incomeScore = countKeywordMatches(normalized, INCOME_KEYWORDS);
   const transferScore = countKeywordMatches(normalized, TRANSFER_KEYWORDS.filter((keyword) => keyword !== "pix"));
   const hasPix = /\bpix\b/.test(normalized);
-  const hasTransferContext = /\b(de|da|do).+\b(para|pra|pro)\b/.test(normalized) || /\b(origem|destino)\b/.test(normalized);
+  const hasPixTarget = hasPix && /\b(para|pra|pro)\s+[a-z0-9]/.test(normalized);
+  const hasTransferContext =
+    /\b(de|da|do).+\b(para|pra|pro)\b/.test(normalized) || /\b(origem|destino)\b/.test(normalized) || hasPixTarget;
+  const hasExpenseContextWithPix =
+    expenseScore > 0 ||
+    /\b(mercado|padaria|ifood|uber|restaurante|farmacia|boleto|fatura)\b/.test(normalized);
+
+  if (hasPixTarget && !hasExpenseContextWithPix) {
+    return "TRANSFERENCIA";
+  }
 
   if (hasPix && !hasTransferContext && expenseScore > 0) {
     return "DESPESA";

@@ -159,18 +159,29 @@ export function parsePtBrNumber(raw: string): number | null {
   const normalized = raw.replace(/[^\d,.-]/g, "");
   if (!normalized) return null;
 
-  if (normalized.includes(",") && normalized.includes(".")) {
-    const value = Number(normalized.replace(/\./g, "").replace(",", "."));
-    return Number.isFinite(value) ? value : null;
+  const sign = normalized.startsWith("-") ? -1 : 1;
+  const unsigned = normalized.replace(/^[+-]/, "");
+  const hasComma = unsigned.includes(",");
+  const hasDot = unsigned.includes(".");
+
+  if (hasComma && hasDot) {
+    const value = Number(unsigned.replace(/\./g, "").replace(",", "."));
+    return Number.isFinite(value) ? sign * value : null;
   }
 
-  if (normalized.includes(",")) {
-    const value = Number(normalized.replace(",", "."));
-    return Number.isFinite(value) ? value : null;
+  if (hasComma) {
+    const value = Number(unsigned.replace(/\./g, "").replace(",", "."));
+    return Number.isFinite(value) ? sign * value : null;
   }
 
-  const value = Number(normalized);
-  return Number.isFinite(value) ? value : null;
+  if (hasDot) {
+    const looksLikeThousandSeparator = /^\d{1,3}(?:\.\d{3})+$/.test(unsigned);
+    const value = Number(looksLikeThousandSeparator ? unsigned.replace(/\./g, "") : unsigned);
+    return Number.isFinite(value) ? sign * value : null;
+  }
+
+  const value = Number(unsigned);
+  return Number.isFinite(value) ? sign * value : null;
 }
 
 export function parseScaledAmount(raw: string): number | null {
@@ -209,10 +220,31 @@ export function parseAmountInput(input: string): number | null {
     .replace(/\b\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?\b/g, " ")
     .replace(/\bdia\s+\d{1,2}\s+de\s+[a-z]+\b/gi, " ");
 
-  const match = scrubbedInput.match(/(\d{1,3}(?:\.\d{3})*(?:,\d{1,2})|\d+(?:[.,]\d{1,2})?)/);
-  if (!match?.[1]) return null;
+  const matches = [
+    ...scrubbedInput.matchAll(/(\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?|\d+[.,]\d{1,2}|\d+)/g),
+  ];
 
-  return parsePtBrNumber(match[1]);
+  for (let index = matches.length - 1; index >= 0; index -= 1) {
+    const token = matches[index]?.[1];
+    if (!token) continue;
+
+    const year = Number(token.replace(/[^\d]/g, ""));
+    const looksLikeYear =
+      /^\d{4}$/.test(token.replace(/[^\d]/g, "")) &&
+      Number.isFinite(year) &&
+      year >= 1900 &&
+      year <= 2100 &&
+      /\b(janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro|ano|mes|m[eê]s|semana)\b/i.test(
+        removeDiacritics(input).toLowerCase(),
+      );
+
+    if (looksLikeYear) continue;
+
+    const parsed = parsePtBrNumber(token);
+    if (parsed !== null) return parsed;
+  }
+
+  return null;
 }
 
 export function formatDateLabel(ymd: string): string {

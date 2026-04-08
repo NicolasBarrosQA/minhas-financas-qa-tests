@@ -80,6 +80,14 @@ describe("Azinha fallback parser", () => {
     expect(response.transaction?.amount).toBe(3000);
   });
 
+  it("parses pt-BR thousand separator with dot", () => {
+    const response = buildFallbackParseResponse(makePayload("Recebi 1.500 de salário"));
+    expect(response.intent).toBe("TRANSACTION");
+    expect(response.needsClarification).toBe(false);
+    expect(response.transaction?.type).toBe("RECEITA");
+    expect(response.transaction?.amount).toBe(1500);
+  });
+
   it("parses transfer with source and destination", () => {
     const response = buildFallbackParseResponse(makePayload("Transferi 200 da Nubank para Inter"));
     expect(response.intent).toBe("TRANSACTION");
@@ -87,6 +95,15 @@ describe("Azinha fallback parser", () => {
     expect(response.transaction?.amount).toBe(200);
     expect(response.transaction?.sourceName).toContain("Nubank");
     expect(response.transaction?.destinationName).toContain("Inter");
+  });
+
+  it("detects pix transfer to person target", () => {
+    const response = buildFallbackParseResponse(makePayload("Pix 120 para Joao"));
+    expect(response.intent).toBe("TRANSACTION");
+    expect(response.needsClarification).toBe(false);
+    expect(response.transaction?.type).toBe("TRANSFERENCIA");
+    expect(response.transaction?.amount).toBe(120);
+    expect(response.transaction?.destinationName).toContain("Joao");
   });
 
   it("parses installments and card intent", () => {
@@ -147,6 +164,13 @@ describe("Azinha fallback parser", () => {
 
   it("does not use date fragments as amount when value is missing", () => {
     const response = buildFallbackParseResponse(makePayload("Paguei mercado em 22-03"));
+    expect(response.intent).toBe("TRANSACTION");
+    expect(response.needsClarification).toBe(true);
+    expect(response.transaction).toBeNull();
+  });
+
+  it("does not treat year token as transaction amount", () => {
+    const response = buildFallbackParseResponse(makePayload("Recebi salário de março 2026"));
     expect(response.intent).toBe("TRANSACTION");
     expect(response.needsClarification).toBe(true);
     expect(response.transaction).toBeNull();

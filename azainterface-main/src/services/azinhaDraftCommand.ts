@@ -57,10 +57,33 @@ function levenshtein(a: string, b: string, maxDistance: number): number {
   return previous[b.length];
 }
 
+function isSingleAdjacentTransposition(token: string, expected: string): boolean {
+  if (token.length !== expected.length || token.length < 2) return false;
+
+  let firstDiff = -1;
+  for (let index = 0; index < token.length; index += 1) {
+    if (token[index] !== expected[index]) {
+      firstDiff = index;
+      break;
+    }
+  }
+
+  if (firstDiff < 0 || firstDiff >= token.length - 1) return false;
+  if (token[firstDiff] !== expected[firstDiff + 1] || token[firstDiff + 1] !== expected[firstDiff]) {
+    return false;
+  }
+
+  return (
+    token.slice(0, firstDiff) === expected.slice(0, firstDiff) &&
+    token.slice(firstDiff + 2) === expected.slice(firstDiff + 2)
+  );
+}
+
 function isNearToken(token: string, expected: string): boolean {
   if (!token || !expected) return false;
   if (token === expected) return true;
   if (token[0] !== expected[0]) return false;
+  if (isSingleAdjacentTransposition(token, expected)) return true;
 
   const maxDistance = Math.max(1, Math.min(2, Math.floor(expected.length / 4)));
   return levenshtein(token, expected, maxDistance) <= maxDistance;

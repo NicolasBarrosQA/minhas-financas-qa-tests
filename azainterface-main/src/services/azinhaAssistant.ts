@@ -48,9 +48,11 @@ const YMD_RE = /^\d{4}-\d{2}-\d{2}$/;
 const TRANSACTION_SIGNAL_RE =
   /\d|r\$|real|pix|transfer|transferi|gastei|recebi|comprei|comi|paguei|pagei|perdi|cartao|parcela|entrada|saida|despesa|receita|fatura|deposit|depositei|saque|mercado|uber|ifood/i;
 const LARGE_SCALE_TOKEN_RE = /\b(bilh(?:ao|oes)|bi|milh(?:ao|oes)|mi|mil|k)\b/i;
-const REMOTE_PARSER_COOLDOWN_MS = 2 * 60 * 1000;
+const REMOTE_PARSER_BASE_COOLDOWN_MS = 20 * 1000;
+const REMOTE_PARSER_MAX_COOLDOWN_MS = 2 * 60 * 1000;
 
 let remoteParserDisabledUntil = 0;
+let remoteParserTransientFailures = 0;
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -77,21 +79,57 @@ function repairEncodingArtifacts(value: string): string {
   }
 }
 
-function sanitizeToneText(value: string | null): string | null {
-  if (!value) return null;
-
-  const repaired = repairEncodingArtifacts(value);
-  const cleaned = repaired
+function normalizeToneLine(value: string): string {
+  return value
     .replace(/\bpra\b/gi, "para")
     .replace(/\bpro\b/gi, "para o")
     .replace(/\bvc\b/gi, "você")
     .replace(/\btamo\b/gi, "estamos")
     .replace(/\bpq\b/gi, "porque")
-    .replace(/\s{2,}/g, " ")
+    .replace(/[ \t]{2,}/g, " ")
     .trim();
+}
+
+function uppercaseFirstLetter(value: string): string {
+  const match = value.match(/[A-Za-zÀ-ÖØ-öø-ÿ]/);
+  if (!match || match.index === undefined) return value;
+  const index = match.index;
+  return `${value.slice(0, index)}${value[index].toUpperCase()}${value.slice(index + 1)}`;
+}
+
+function sanitizeToneText(value: string | null): string | null {
+  if (!value) return null;
+
+  const repaired = repairEncodingArtifacts(value);
+  const normalized = repaired
+    .replace(/\r\n?/g, "\n")
+    .replace(/\u00a0/g, " ")
+    .replace(/^\s*(?:\?\?|##|@@)+\s*/g, "");
+
+  const cleanedLines: string[] = [];
+  for (const rawLine of normalized.split("\n")) {
+    const trimmed = rawLine.trim();
+    if (!trimmed) {
+      if (cleanedLines.length > 0 && cleanedLines[cleanedLines.length - 1] !== "") {
+        cleanedLines.push("");
+      }
+      continue;
+    }
+
+    const cleanedLine = normalizeToneLine(trimmed);
+    if (cleanedLine) {
+      cleanedLines.push(cleanedLine);
+    }
+  }
+
+  while (cleanedLines.length > 0 && cleanedLines[cleanedLines.length - 1] === "") {
+    cleanedLines.pop();
+  }
+
+  const cleaned = cleanedLines.join("\n").trim();
 
   if (!cleaned) return null;
-  return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+  return uppercaseFirstLetter(cleaned);
 }
 
 function clampConfidence(value: number | null | undefined): number {
@@ -476,12 +514,36 @@ function shouldSkipRemoteParser(): boolean {
   return Date.now() < remoteParserDisabledUntil;
 }
 
+function getErrorHttpStatus(error: unknown): number | null {
+  if (!isObject(error)) return null;
+  const context = error.context;
+  if (context instanceof Response) {
+    return context.status;
+  }
+  return null;
+}
+
+function shouldTriggerTransientCooldown(status: number | null): boolean {
+  if (status === null) return true;
+  return status === 408 || status === 429 || status >= 500;
+}
+
 function markRemoteParserUnavailable(): void {
-  remoteParserDisabledUntil = Date.now() + REMOTE_PARSER_COOLDOWN_MS;
+  remoteParserTransientFailures += 1;
+  const cooldown = Math.min(
+    REMOTE_PARSER_MAX_COOLDOWN_MS,
+    REMOTE_PARSER_BASE_COOLDOWN_MS * 2 ** Math.max(0, remoteParserTransientFailures - 1),
+  );
+  remoteParserDisabledUntil = Date.now() + cooldown;
 }
 
 function clearRemoteParserUnavailable(): void {
   remoteParserDisabledUntil = 0;
+  remoteParserTransientFailures = 0;
+}
+
+export function resetRemoteParserStateForTests(): void {
+  clearRemoteParserUnavailable();
 }
 
 export async function parseTransactionWithAssistant(payload: AssistantParseRequest): Promise<AssistantParseResponse> {
@@ -500,9 +562,18 @@ export async function parseTransactionWithAssistant(payload: AssistantParseReque
     });
 
     if (error) {
-      markRemoteParserUnavailable();
+      const status = getErrorHttpStatus(error);
+      const isTransient = shouldTriggerTransientCooldown(status);
+      if (isTransient) {
+        markRemoteParserUnavailable();
+      } else {
+        clearRemoteParserUnavailable();
+      }
       const reason = await extractInvokeErrorMessage(error);
-      return withExtraSignal(buildFallbackParseResponse(payload, { reason }), "fallback_parser");
+      return withExtraSignal(
+        buildFallbackParseResponse(payload, { reason }),
+        isTransient ? "fallback_parser" : "fallback_parser_non_transient",
+      );
     }
 
     clearRemoteParserUnavailable();

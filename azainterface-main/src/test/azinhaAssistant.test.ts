@@ -13,7 +13,7 @@ vi.mock("@/integrations/supabase/client", () => ({
   },
 }));
 
-import { parseTransactionWithAssistant } from "@/services/azinhaAssistant";
+import { parseTransactionWithAssistant, resetRemoteParserStateForTests } from "@/services/azinhaAssistant";
 
 function makePayload(text: string): AssistantParseRequest {
   return {
@@ -39,6 +39,7 @@ function makePayload(text: string): AssistantParseRequest {
 
 describe("parseTransactionWithAssistant", () => {
   beforeEach(() => {
+    resetRemoteParserStateForTests();
     invokeMock.mockReset();
   });
 
@@ -120,5 +121,105 @@ describe("parseTransactionWithAssistant", () => {
     expect(response.answer).toContain("consegui");
     expect(response.answer).toContain("você");
     expect(response.answer).not.toContain("vc");
+  });
+
+  it("removes broken prefix markers and normalizes slang in OTHER answers", async () => {
+    invokeMock.mockResolvedValue({
+      data: {
+        intent: "OTHER",
+        needsClarification: false,
+        clarification: null,
+        answer: "?? beleza, vc consegue tentar de novo?",
+        confidence: 0.81,
+        confidenceSignals: ["remote_other"],
+        transaction: null,
+      },
+      error: null,
+    });
+
+    const response = await parseTransactionWithAssistant(makePayload("oi"));
+
+    expect(response.intent).toBe("OTHER");
+    expect(response.answer).toBeTruthy();
+    expect(response.answer).not.toContain("??");
+    expect(response.answer).not.toContain("vc");
+    expect(response.answer).toContain("você");
+  });
+
+  it("preserves line breaks and list formatting while normalizing slang", async () => {
+    invokeMock.mockResolvedValue({
+      data: {
+        intent: "OTHER",
+        needsClarification: false,
+        clarification: null,
+        answer: "?? resumo da revisão:\n- vc ajustou o valor\n- pq havia ambiguidade",
+        confidence: 0.8,
+        confidenceSignals: ["remote_other"],
+        transaction: null,
+      },
+      error: null,
+    });
+
+    const response = await parseTransactionWithAssistant(makePayload("oi"));
+
+    expect(response.intent).toBe("OTHER");
+    expect(response.answer).toContain("\n- você ajustou o valor\n- porque havia ambiguidade");
+    expect(response.answer?.split("\n").length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("does not enter cooldown for non-transient auth errors", async () => {
+    invokeMock
+      .mockResolvedValueOnce({
+        data: null,
+        error: {
+          context: new Response(JSON.stringify({ error: "Invalid or expired token" }), { status: 401 }),
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          intent: "TRANSACTION",
+          needsClarification: false,
+          clarification: null,
+          answer: null,
+          confidence: 0.82,
+          confidenceSignals: ["remote_success"],
+          transaction: {
+            type: "DESPESA",
+            amount: 50,
+            description: "Mercado",
+            date: "2026-03-23",
+            installments: null,
+            sourceKind: "ACCOUNT",
+            sourceName: "Nubank",
+            destinationName: null,
+            categoryName: "Alimentacao",
+          },
+        },
+        error: null,
+      });
+
+    const first = await parseTransactionWithAssistant(makePayload("gastei 50 no mercado"));
+    const second = await parseTransactionWithAssistant(makePayload("gastei 50 no mercado"));
+
+    expect(first.confidenceSignals).toContain("fallback_parser_non_transient");
+    expect(second.intent).toBe("TRANSACTION");
+    expect(second.transaction?.amount).toBe(50);
+    expect(invokeMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("enters cooldown for transient server failures", async () => {
+    invokeMock.mockResolvedValueOnce({
+      data: null,
+      error: {
+        context: new Response(JSON.stringify({ error: "upstream timeout" }), { status: 500 }),
+      },
+    });
+
+    const first = await parseTransactionWithAssistant(makePayload("gastei 20 no uber"));
+    const second = await parseTransactionWithAssistant(makePayload("gastei 20 no uber"));
+
+    expect(first.confidenceSignals).toContain("fallback_parser");
+    expect(second.confidenceSignals).toContain("fallback_parser_cooldown");
+    expect(invokeMock).toHaveBeenCalledTimes(1);
   });
 });

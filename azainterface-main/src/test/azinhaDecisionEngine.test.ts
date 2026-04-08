@@ -45,6 +45,38 @@ describe("Azinha decision engine", () => {
     expect(result.tier).toBe("high");
   });
 
+  it("asks source confirmation when expense source was inferred automatically", () => {
+    const result = decideAzinhaNextStep({
+      userText: "gastei 30 no mercado",
+      response: response({
+        confidence: 0.82,
+        transaction: {
+          type: "DESPESA",
+          amount: 30,
+          description: "Mercado",
+          date: "2026-03-22",
+          installments: null,
+          sourceKind: "AUTO",
+          sourceName: null,
+          destinationName: null,
+          categoryName: "Alimentacao",
+        },
+      }),
+      draft: {
+        type: "DESPESA",
+        amount: 30,
+        description: "Mercado",
+        date: "2026-03-22",
+        accountId: "acc-1",
+        categoryId: "cat-1",
+      },
+      validationMessage: null,
+    });
+
+    expect(result.action).toBe("ask");
+    expect(result.tag).toBe("source_needed");
+  });
+
   it("asks objective question on medium confidence category ambiguity", () => {
     const result = decideAzinhaNextStep({
       userText: "paguei 200 pro Joao",
@@ -211,6 +243,39 @@ describe("Azinha decision engine", () => {
         description: "Transferencia entre contas",
         date: "2026-03-22",
         accountId: "acc-1",
+      },
+      validationMessage: null,
+    });
+
+    expect(result.action).toBe("ask");
+    expect(result.tag).toBe("transfer_accounts_needed");
+  });
+
+  it("asks transfer confirmation when one endpoint was only inferred", () => {
+    const result = decideAzinhaNextStep({
+      userText: "transferi 200 para Inter",
+      response: response({
+        confidence: 0.81,
+        transaction: {
+          type: "TRANSFERENCIA",
+          amount: 200,
+          description: "Transferencia entre contas",
+          date: "2026-03-22",
+          installments: null,
+          sourceKind: "ACCOUNT",
+          sourceName: null,
+          destinationName: "Inter",
+          categoryName: "Transferencia",
+        },
+      }),
+      draft: {
+        type: "TRANSFERENCIA",
+        amount: 200,
+        description: "Transferencia entre contas",
+        date: "2026-03-22",
+        accountId: "acc-1",
+        transferToAccountId: "acc-2",
+        categoryId: "cat-1",
       },
       validationMessage: null,
     });

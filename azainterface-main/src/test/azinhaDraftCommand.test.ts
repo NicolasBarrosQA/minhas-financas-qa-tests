@@ -68,6 +68,15 @@ describe("Azinha draft command parser", () => {
     }
   });
 
+  it("extracts amount change with adjacent letter transposition typo", () => {
+    const command = parseDraftCommand("valro 129,90");
+    expect(command.kind).toBe("field");
+    if (command.kind === "field") {
+      expect(command.field).toBe("amount");
+      expect(command.value).toBe("129,90");
+    }
+  });
+
   it("extracts type change", () => {
     const command = parseDraftCommand("tipo transferencia");
     expect(command.kind).toBe("field");

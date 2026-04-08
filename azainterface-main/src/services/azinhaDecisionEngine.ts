@@ -183,11 +183,12 @@ function buildSlots(input: AzinhaDecisionInput): DecisionSlot[] {
   }
 
   if (tx.type === "DESPESA") {
-    if (!input.draft?.accountId && !input.draft?.cardId) {
+    const sourceWasInferred = tx.sourceKind === "AUTO" && !tx.sourceName && (tx.installments || 0) <= 1;
+    if (sourceWasInferred || (!input.draft?.accountId && !input.draft?.cardId)) {
       slots.push({
         field: "source",
         status: "ambiguous",
-        reason: "source_not_defined",
+        reason: sourceWasInferred ? "source_inferred" : "source_not_defined",
         priority: 1,
         question: "Só preciso confirmar: essa saída foi na conta ou no cartão?",
         tag: "source_needed",
@@ -233,11 +234,12 @@ function buildSlots(input: AzinhaDecisionInput): DecisionSlot[] {
   }
 
   if (tx.type === "TRANSFERENCIA") {
-    if (!input.draft?.accountId || !input.draft?.transferToAccountId) {
+    const transferEndpointsInferred = !tx.sourceName || !tx.destinationName;
+    if (transferEndpointsInferred || !input.draft?.accountId || !input.draft?.transferToAccountId) {
       slots.push({
         field: "source",
-        status: "missing",
-        reason: "transfer_accounts_missing",
+        status: transferEndpointsInferred ? "ambiguous" : "missing",
+        reason: transferEndpointsInferred ? "transfer_accounts_inferred" : "transfer_accounts_missing",
         priority: 0,
         question: "Só preciso confirmar origem e destino da transferência.",
         tag: "transfer_accounts_needed",

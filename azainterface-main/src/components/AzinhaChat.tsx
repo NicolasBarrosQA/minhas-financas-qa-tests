@@ -156,7 +156,9 @@ export function AzinhaChat() {
 
   const addAssistantMessage = (text: string) => {
     const sanitized = text
+      .replace(/\u00a0/g, " ")
       .replace(/\r\n/g, "\n")
+      .replace(/[ \t]+\n/g, "\n")
       .replace(/\n{3,}/g, "\n\n")
       .trim();
     if (!sanitized) return;
@@ -1120,10 +1122,10 @@ export function AzinhaChat() {
       setMascotMood("happy");
       pushDraftSummary(draftWithDecision);
     } catch (error) {
+      console.error("Azinha chat processing failed", error);
       recordAzinhaMetric("save_failed");
       setMascotMood("sad");
-      const message = error instanceof Error ? error.message : "Falha ao analisar mensagem.";
-      addAssistantMessage(`Não consegui processar sua mensagem agora. ${message}`);
+      addAssistantMessage("Não consegui processar sua mensagem agora. Tente novamente em instantes.");
     } finally {
       setIsProcessing(false);
     }
@@ -1216,7 +1218,7 @@ export function AzinhaChat() {
                     className={`flex ${msg.sender === "user" ? "justify-end" : "justify-start"}`}
                   >
                     <div
-                      className={`max-w-[85%] whitespace-pre-line rounded-2xl px-4 py-2.5 text-sm ${
+                      className={`max-w-[85%] whitespace-pre-line break-words leading-relaxed rounded-2xl px-4 py-2.5 text-sm ${
                         msg.sender === "user"
                           ? "bg-gradient-to-br from-amber-400 to-amber-500 text-amber-950 rounded-br-md"
                           : "bg-muted text-foreground rounded-bl-md"
