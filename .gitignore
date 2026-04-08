@@ -32,3 +32,6 @@
 azainterface-main/dev-once.log
 azainterface-main/dev-run.log
 azainterface-main/tmp_client_dump.txt
+
+# Local Netlify folder
+.netlify

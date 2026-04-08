@@ -97,14 +97,18 @@ if ($hasOrigin) {
 $netlifyToken = $env:NETLIFY_AUTH_TOKEN
 $netlifySiteId = $env:NETLIFY_SITE_ID
 
-if ($netlifyToken -and $netlifySiteId) {
+if ($netlifySiteId) {
   Write-Step "Running Netlify production deploy"
   Push-Location $appDir
   npm run build
-  npx netlify deploy --prod --dir=dist --message $CommitMessage
+  if ($netlifyToken) {
+    npx netlify deploy --prod --dir=dist --site $netlifySiteId --auth $netlifyToken --message $CommitMessage
+  } else {
+    npx netlify deploy --prod --dir=dist --site $netlifySiteId --message $CommitMessage
+  }
   Pop-Location
 } else {
-  Write-Step "Skipping direct Netlify CLI deploy (set NETLIFY_AUTH_TOKEN and NETLIFY_SITE_ID to enable)"
+  Write-Step "Skipping direct Netlify CLI deploy (set NETLIFY_SITE_ID to enable)"
   Write-Step "If Netlify is connected to your git repo, push already triggers deploy automatically."
 }
 
