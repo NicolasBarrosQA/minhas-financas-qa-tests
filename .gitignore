@@ -26,12 +26,3 @@
 **/.env
 **/.env.local
 **/.env.*.local
-.env.deploy.local
-
-# App-specific local files
-azainterface-main/dev-once.log
-azainterface-main/dev-run.log
-azainterface-main/tmp_client_dump.txt
-
-# Local Netlify folder
-.netlify

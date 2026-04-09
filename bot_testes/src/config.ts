@@ -1,4 +1,3 @@
-﻿import path from 'node:path';
 import dotenv from 'dotenv';
 import { z } from 'zod';
 import type { BotConfig } from './types.js';
@@ -41,7 +40,7 @@ export function loadConfig(): BotConfig {
   dotenv.config();
 
   if (parseBool(process.env.BOT_LOAD_PARENT_ENV, false)) {
-    dotenv.config({ path: path.resolve(process.cwd(), '../azainterface-main/.env') });
+    dotenv.config({ path: '../.env' });
   }
 
   const allowRemoteTarget = parseBool(process.env.BOT_ALLOW_REMOTE_TARGET, false);
@@ -84,4 +83,5 @@ export function loadConfig(): BotConfig {
   cached = parsed;
   return parsed;
 }
+
 
